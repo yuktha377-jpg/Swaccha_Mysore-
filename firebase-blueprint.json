@@ -1,0 +1,111 @@
+{
+  "entities": {
+    "Report": {
+      "title": "Garbage Collection Report",
+      "description": "A report submitted by a citizen about garbage disposal issues or requests.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "UID of the citizen who reported." },
+        "status": { "type": "string", "enum": ["pending", "assigned", "completed"], "description": "Current status of the report." },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" },
+            "address": { "type": "string" }
+          },
+          "required": ["lat", "lng", "address"]
+        },
+        "description": { "type": "string" },
+        "photoUrl": { "type": "string" },
+        "category": { "type": "string", "enum": ["dry", "wet", "hazardous", "bulk"] },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "assignedTo": { "type": "string", "description": "UID of the staff or vehicle ID." },
+        "feedback": {
+          "type": "object",
+          "properties": {
+            "rating": { "type": "integer", "minimum": 1, "maximum": 5 },
+            "comment": { "type": "string" },
+            "timestamp": { "type": "string", "format": "date-time" }
+          }
+        }
+      },
+      "required": ["userId", "status", "location", "category", "timestamp"]
+    },
+    "User": {
+      "title": "User Profile",
+      "description": "Profile data for citizens and municipality staff.",
+      "type": "object",
+      "properties": {
+        "role": { "type": "string", "enum": ["citizen", "staff", "admin"] },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "area": { "type": "string" },
+        "photoUrl": { "type": "string" }
+      },
+      "required": ["role", "name", "email"]
+    },
+    "Vehicle": {
+      "title": "Collection Vehicle",
+      "description": "Real-time tracking of garbage collection vehicles.",
+      "type": "object",
+      "properties": {
+        "vehicleNumber": { "type": "string" },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lng": { "type": "number" }
+          }
+        },
+        "status": { "type": "string", "enum": ["active", "idle", "maintenance"] },
+        "staff": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["vehicleNumber", "location", "status"]
+    },
+    "Announcement": {
+      "title": "Municipality Announcement",
+      "description": "Public announcements broadcasted by the municipality.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "priority": { "type": "string", "enum": ["low", "normal", "high"] }
+      },
+      "required": ["title", "content", "timestamp"]
+    },
+    "StaffVerification": {
+      "title": "Staff ID Verification",
+      "description": "Valid municipal IDs that allow users to register as staff.",
+      "type": "object",
+      "properties": {
+        "key": { "type": "string" },
+        "active": { "type": "boolean" }
+      },
+      "required": ["key", "active"]
+    }
+  },
+  "firestore": {
+    "reports": {
+      "schema": "Report",
+      "description": "User submitted garbage reports."
+    },
+    "users": {
+      "schema": "User",
+      "description": "User profiles."
+    },
+    "vehicles": {
+      "schema": "Vehicle",
+      "description": "Real-time vehicle tracking."
+    },
+    "announcements": {
+      "schema": "Announcement",
+      "description": "Public notices."
+    },
+    "staff_verification": {
+      "schema": "StaffVerification",
+      "description": "Authorized municipal IDs."
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Mysore Swachha",
+  "description": "A platform connecting citizens of Mysore with the Municipal Office for efficient garbage collection, reporting, and management.",
+  "requestFramePermissions": ["geolocation", "camera"],
+  "majorCapabilities": []
+}

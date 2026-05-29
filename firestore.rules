@@ -1,0 +1,129 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // 0. Catch-all Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    
+    // Role checks
+    function getUserData(uid) {
+      let path = /databases/$(database)/documents/users/$(uid);
+      return exists(path) ? get(path).data : null;
+    }
+    function isStaff() {
+      let data = getUserData(request.auth.uid);
+      return isSignedIn() && data != null && data.role in ['staff', 'admin'];
+    }
+    function isAdmin() {
+      let data = getUserData(request.auth.uid);
+      return isSignedIn() && data != null && data.role == 'admin';
+    }
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // --- Validations ---
+    function isValidReport(data) {
+      return data.userId is string && data.userId.size() <= 128 
+        && data.status in ['pending', 'assigned', 'completed']
+        && data.category in ['dry', 'wet', 'hazardous', 'bulk']
+        && data.description is string && data.description.size() <= 5000
+        && data.location.address is string && data.location.address.size() <= 256
+        && data.location.lat is number && data.location.lng is number
+        && data.timestamp is timestamp
+        && (!data.keys().contains('feedback') || (
+          data.feedback.rating is int && data.feedback.rating >= 1 && data.feedback.rating <= 5
+          && (!data.feedback.keys().contains('comment') || (data.feedback.comment is string && data.feedback.comment.size() <= 1000))
+          && data.feedback.timestamp is timestamp
+        ));
+    }
+
+    function isValidUser(data) {
+      return data.role in ['citizen', 'staff', 'admin']
+        && data.name is string && data.name.size() <= 128
+        && data.email is string && data.email.size() <= 128;
+    }
+
+    function isValidAnnouncement(data) {
+      return data.title is string && data.title.size() <= 256
+        && data.content is string && data.content.size() <= 5000
+        && data.priority in ['low', 'normal', 'high']
+        && data.timestamp is timestamp;
+    }
+
+    function isValidVehicle(data) {
+      return data.vehicleNumber is string && data.vehicleNumber.size() <= 32
+        && data.status in ['active', 'idle', 'maintenance']
+        && data.staff is list
+        && data.location.lat is number && data.location.lng is number;
+    }
+
+    // --- Rules ---
+
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isStaff();
+      allow create: if isOwner(userId) && isValidUser(incoming()) && incoming().role == 'citizen';
+      allow update: if isOwner(userId) && isValidUser(incoming()) 
+        && (incoming().diff(existing()).affectedKeys().hasOnly(['name', 'area', 'photoUrl']))
+        && (incoming().role == existing().role);
+    }
+
+    match /reports/{reportId} {
+      allow get: if isSignedIn() && (isOwner(existing().userId) || isStaff());
+      allow list: if isSignedIn() && (
+        (isStaff()) || 
+        (resource.data.userId == request.auth.uid)
+      );
+      
+      allow create: if isVerified() 
+        && isValidId(reportId)
+        && isValidReport(incoming())
+        && isOwner(incoming().userId)
+        && incoming().status == 'pending'
+        && incoming().timestamp == request.time;
+        
+      allow update: if isSignedIn() && isValidReport(incoming()) && (
+        // Citizen can update their own pending report (e.g. edit description)
+        (isOwner(existing().userId) && existing().status == 'pending' 
+          && incoming().diff(existing()).affectedKeys().hasOnly(['description', 'category', 'location'])) ||
+        // Citizen can add feedback to a completed report
+        (isOwner(existing().userId) && existing().status == 'completed'
+          && !existing().keys().contains('feedback')
+          && incoming().diff(existing()).affectedKeys().hasOnly(['feedback'])) ||
+        // Staff can update status or assignment
+        (isStaff() && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'assignedTo']))
+      );
+
+      allow delete: if isStaff() || (isOwner(existing().userId) && existing().status == 'pending');
+    }
+
+    match /announcements/{annId} {
+      allow read: if true;
+      allow create: if isStaff() && isValidAnnouncement(incoming()) && incoming().timestamp == request.time;
+      allow update: if isStaff() && isValidAnnouncement(incoming());
+      allow delete: if isStaff();
+    }
+
+    match /vehicles/{vehicleId} {
+      allow read: if isSignedIn();
+      allow create: if isStaff() && isValidVehicle(incoming());
+      allow update: if isStaff() && isValidVehicle(incoming());
+      allow delete: if isStaff();
+    }
+
+    match /staff_verification/{keyId} {
+      allow get: if isSignedIn();
+      allow list, write: if false; // Only system/authenticated get check
+    }
+  }
+}
